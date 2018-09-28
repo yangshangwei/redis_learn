@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+	xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:p="http://www.springframework.org/schema/p"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans 
+		http://www.springframework.org/schema/beans/spring-beans.xsd
+		http://www.springframework.org/schema/context 
+		http://www.springframework.org/schema/context/spring-context.xsd">
+
+    <context:property-placeholder location="classpath:redis/redis.properties" />
+
+    <!--2,注意新版本2.3以后，JedisPoolConfig的property name，不是maxActive而是maxTotal，而且没有maxWait属性，建议看一下Jedis源码或百度。 -->
+    <!-- redis连接池配置 -->
+    <bean id="jedisPoolConfig" class="redis.clients.jedis.JedisPoolConfig">
+        <!--最大空闲数 -->
+        <property name="maxIdle" value="${redis.maxIdle}" />
+        <!--连接池的最大数据库连接数 -->
+        <property name="maxTotal" value="${redis.maxTotal}" />
+        <!--最大建立连接等待时间 -->
+        <property name="maxWaitMillis" value="${redis.maxWaitMillis}" />
+        <!--逐出连接的最小空闲时间 默认1800000毫秒(30分钟) -->
+        <property name="minEvictableIdleTimeMillis" value="${redis.minEvictableIdleTimeMillis}" />
+        <!--每次逐出检查时 逐出的最大数目 如果为负数就是 : 1/abs(n), 默认3 -->
+        <property name="numTestsPerEvictionRun" value="${redis.numTestsPerEvictionRun}" />
+        <!--逐出扫描的时间间隔(毫秒) 如果为负数,则不运行逐出线程, 默认-1 -->
+        <property name="timeBetweenEvictionRunsMillis" value="${redis.timeBetweenEvictionRunsMillis}" />
+   		<property name="testOnBorrow" value="true"></property>
+		<property name="testOnReturn" value="true"></property>
+		<property name="testWhileIdle" value="true"></property>
+    </bean>
+	
+	<!--redis连接工厂 -->
+    <bean id="jedisConnectionFactory"
+        class="org.springframework.data.redis.connection.jedis.JedisConnectionFactory"
+        destroy-method="destroy">
+        <property name="poolConfig" ref="jedisPoolConfig"></property>
+        <!--IP地址 -->
+        <property name="hostName" value="${redis.host.ip}"></property>
+        <!--端口号 -->
+        <property name="port" value="${redis.port}"></property>
+        <!--如果Redis设置有密码 -->
+        <property name="password" value="${redis.password}" /> 
+        <!--客户端超时时间单位是毫秒 -->
+        <property name="timeout" value="${redis.timeout}"></property>
+        <property name="usePool" value="true" />
+        <!--<property name="database" value="0" /> -->
+    </bean>
+	
+	<!-- 键值序列化器设置为String 类型 -->
+	<bean id="stringRedisSerializer" class="org.springframework.data.redis.serializer.StringRedisSerializer"/>
+
+	<!-- redis template definition -->
+	<bean id="redisTemplate" class="org.springframework.data.redis.core.RedisTemplate"
+		p:connection-factory-ref="jedisConnectionFactory"
+		p:keySerializer-ref="stringRedisSerializer"
+		p:valueSerializer-ref="stringRedisSerializer">
+	</bean>
+	
+	<!-- 自定义 发布订阅监听类 -->
+	<bean id="redisMessageListener" class="com.artisan.redis.publish.RedisMessageListener"
+		p:redisTemplate-ref="redisTemplate"/>
+	<bean id="redisMessageListener2" class="com.artisan.redis.publish.RedisMessageListener2"
+		p:redisTemplate-ref="redisTemplate"/>	
+		
+	<!-- 监听容器 -->	
+	<bean id="topicContainer"
+		class="org.springframework.data.redis.listener.RedisMessageListenerContainer"
+		destroy-method="destroy">
+		<!--Redis 连接工厂 -->
+		<property name="connectionFactory" ref="jedisConnectionFactory"></property>
+		<!-- 连接池，这里只要线程池生存 ， 才能继续监昕 -->
+		<property name="taskExecutor">
+			<bean
+				class="org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor">
+				<property name="corePoolSize" value="3"></property>
+			</bean>
+		</property>
+		<!-- 消息监听 Map -->
+		<property name="messageListeners">
+			<map>
+				<!--一配置监听者， key-ref 和 bean id 定义一致 -->
+				<entry key-ref="redisMessageListener">
+					<!--监听类 -->
+					<bean class="org.springframework.data.redis.listener.ChannelTopic">
+						<constructor-arg value="talk" />
+					</bean>
+				</entry>
+				<entry key-ref="redisMessageListener2">
+					<!--监听类 -->
+					<bean class="org.springframework.data.redis.listener.ChannelTopic">
+						<constructor-arg value="talk" />
+					</bean>
+				</entry>
+			</map>
+		</property>
+	</bean>
+</beans>
