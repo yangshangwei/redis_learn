@@ -13,6 +13,7 @@ public class SpringRedisListDemo {
 	
 	private static final String KEY = "list";
 	
+	@SuppressWarnings("unchecked")
 	public static void main(String[] args) {
 		
 		ApplicationContext ctx = new ClassPathXmlApplicationContext("classpath:spring/spring-redis-list.xml");
